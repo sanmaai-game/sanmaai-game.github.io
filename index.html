@@ -1220,6 +1220,8 @@ function onFail(){
 }
 /* ==================== UI 按钮 ==================== */
 function handleButton(x,y){
+  // 按钮绘制使用 canvas 坐标（Y 向下），而传入的是 toWorld 世界坐标（Y 向上），需翻转 Y 对齐
+  y = -y;
   for(const b of uiButtons){
     if(x>=b.x-b.w/2 && x<=b.x+b.w/2 && y>=b.y-b.h/2 && y<=b.y+b.h/2){
       b.action(); return true;
