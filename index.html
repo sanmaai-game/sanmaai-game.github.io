@@ -1010,6 +1010,8 @@ function checkOneLanding(p, isExtra){
   if(p.vy>0) return; // 必须下落
   const bx=p.x, by=p.y;
   for(const plat of platforms){
+    // 性能：Y 快速过滤，跳过远离的平台
+    if(plat.y-by>60 || by-plat.y>60) continue;
     const hw=plat.w/2+CFG.pTol;
     const topY=plat.y+CFG.pHeight/2;
     if(Math.abs(bx-plat.x)<=hw && by-CFG.blockSize/2<=topY && by-CFG.blockSize/2>topY-30){
@@ -1726,6 +1728,9 @@ function update(dt){
   }
   // 平台闪烁
   for(const p of platforms){ if(p.flash>0) p.flash-=dt; }
+  // 性能：清理滚出屏幕很远的旧平台（platforms 按 y 递增，从头删）
+  const platFloor=scrollOffset-CFG.H;
+  while(platforms.length>0 && platforms[0].y<platFloor) platforms.shift();
   // 震动
   if(shakeT>0){ shakeT-=dt; if(shakeT<=0) camShake=0; }
   // 复活提示倒计时
@@ -1759,8 +1764,11 @@ function render(){
 
   ctx.save();
   ctx.translate(0,-scrollOffset);
-  // 平台（五行属性）
+  // 可见范围（视口裁剪用）
+  const viewMin=scrollOffset-CFG.H, viewMax=scrollOffset+CFG.H;
+  // 平台（五行属性）——只画可见范围内
   for(const p of platforms){
+    if(p.y<viewMin||p.y>viewMax) continue;
     const flashing = p.flash>0;
     const wxColor = WX_COLOR[p.wx] || '#78c8ff';
     // 性能优化：去掉 shadowBlur，用亮色模拟发光
@@ -1939,7 +1947,6 @@ function render(){
   }
   // 已固定积木（蛇身节）——只画可见范围内的，堆再高也不卡
   const n=settledBlocks.length;
-  const viewMin=scrollOffset-CFG.H, viewMax=scrollOffset+CFG.H;
   for(let i=0;i<n;i++){
     const b=settledBlocks[i];
     if(b.y<viewMin||b.y>viewMax) continue; // 跳过屏幕外积木
