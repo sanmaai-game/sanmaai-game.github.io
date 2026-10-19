@@ -199,6 +199,13 @@ function resize(){
   ctx.setTransform(scale,0,0,scale,0,0);
 }
 window.addEventListener('resize',resize); resize();
+// 性能优化：全局禁用 canvas 阴影（手机端 shadowBlur 是最耗性能的操作，会导致卡死）
+try{
+  Object.defineProperty(CanvasRenderingContext2D.prototype,'shadowBlur',{
+    get(){ return 0; }, set(v){},
+    configurable:true
+  });
+}catch(e){}
 /* 屏幕坐标 -> 设计坐标(中心原点) */
 function toWorld(clientX, clientY){
   const r=canvas.getBoundingClientRect();
@@ -1071,13 +1078,13 @@ function onSuccess(x,y){
   }
   combo++;
   updateLiveTask('combo',1);
-  if(perfect) updateLiveTask('perfect',1);
   if(combo>maxCombo) maxCombo=combo;
   if(settled.length>maxSnakeLen) maxSnakeLen=settled.length;
   snakeDir = aimAngle;
   const top=platforms[platforms.length-1];
   const distFromCenter = top ? Math.abs(x - top.x) : 999;
   const perfect = top && distFromCenter < top.w*0.15;
+  if(perfect) updateLiveTask('perfect',1);
   // 跳一跳：连续完美命中（跳一跳连跳）
   if(perfect){
     jumpCombo++;
@@ -1561,11 +1568,11 @@ function update(dt){
   if(coinRainT>0){
     coinRainT -= dt;
     coinRainSpawnT -= dt;
-    // 每次生成多枚金币，营造"雨"的效果
+    // 每次生成多枚金币，营造"雨"的效果（上限80枚，防卡死）
     if(coinRainSpawnT<=0){
       coinRainSpawnT = 0.06;
       const batch = 2 + Math.floor(Math.random()*3);
-      for(let i=0;i<batch;i++) spawnCoin();
+      for(let i=0;i<batch;i++){ if(coinsRain.length<80) spawnCoin(); }
     }
   }
   for(let i=coinsRain.length-1;i>=0;i--){
@@ -1930,10 +1937,12 @@ function render(){
     }
     ctx.stroke();
   }
-  // 已固定积木（蛇身节）——去掉所有 shadowBlur，性能优化
+  // 已固定积木（蛇身节）——只画可见范围内的，堆再高也不卡
   const n=settledBlocks.length;
+  const viewMin=scrollOffset-CFG.H, viewMax=scrollOffset+CFG.H;
   for(let i=0;i<n;i++){
     const b=settledBlocks[i];
+    if(b.y<viewMin||b.y>viewMax) continue; // 跳过屏幕外积木
     const isHead = (i===n-1);
     const t = n>1 ? i/(n-1) : 0;
     let bodyColor;
@@ -1997,7 +2006,8 @@ function render(){
   }
   if(projectile && !projectile.dead) drawFlyingBlock(projectile);
   for(const ep of extraProjectiles){ if(!ep.dead && !ep.settled) drawFlyingBlock(ep); }
-  // 粒子（彩色）
+  // 粒子（彩色）——上限200个，防爆帧
+  if(particles.length>200) particles.splice(0,particles.length-200);
   for(const p of particles){
     const a=p.life/p.max;
     ctx.globalAlpha=a;
@@ -2052,6 +2062,8 @@ function render(){
   }
 
   // 浮动文字
+  // 浮动文字——上限30条
+  if(floatTexts.length>30) floatTexts.splice(0,floatTexts.length-30);
   for(const t of floatTexts){
     const a = Math.min(1, t.life/0.3);
     const sc = t.scale * (t.big ? (1 + (1-t.life/t.max)*0.3) : 1);
@@ -2404,7 +2416,7 @@ function drawLeaderboard(){
 /* 启动 */
 resetPlatforms();
 // 环境粒子
-for(let i=0;i<40;i++){
+for(let i=0;i<24;i++){
   ambient.push({
     x:(Math.random()-0.5)*CFG.W, y:(Math.random()-0.5)*CFG.H,
     r:1+Math.random()*2.5, s:8+Math.random()*20, a:0.15+Math.random()*0.3,
