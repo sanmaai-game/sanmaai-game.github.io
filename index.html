@@ -196,7 +196,8 @@ const ctx = canvas.getContext('2d');
 let scale=1, offX=0, offY=0;
 function resize(){
   const dw=window.innerWidth, dh=window.innerHeight;
-  scale=Math.min(dw/CFG.W, dh/CFG.H);
+  // 性能优化：渲染分辨率降低 25%（视觉几乎无差，性能大幅提升）
+  scale=Math.min(dw/CFG.W, dh/CFG.H) * 0.78;
   canvas.width=CFG.W*scale; canvas.height=CFG.H*scale;
   ctx.setTransform(scale,0,0,scale,0,0);
 }
@@ -1576,7 +1577,7 @@ function update(dt){
     if(coinRainSpawnT<=0){
       coinRainSpawnT = 0.06;
       const batch = 2 + Math.floor(Math.random()*3);
-      for(let i=0;i<batch;i++){ if(coinsRain.length<80) spawnCoin(); }
+      for(let i=0;i<batch;i++){ if(coinsRain.length<40) spawnCoin(); }
     }
   }
   for(let i=coinsRain.length-1;i>=0;i--){
@@ -2071,8 +2072,8 @@ function render(){
   }
 
   // 浮动文字
-  // 浮动文字——上限30条
-  if(floatTexts.length>30) floatTexts.splice(0,floatTexts.length-30);
+  // 浮动文字——上限20条
+  if(floatTexts.length>20) floatTexts.splice(0,floatTexts.length-20);
   for(const t of floatTexts){
     const a = Math.min(1, t.life/0.3);
     const sc = t.scale * (t.big ? (1 + (1-t.life/t.max)*0.3) : 1);
@@ -2429,7 +2430,7 @@ function drawLeaderboard(){
 /* 启动 */
 resetPlatforms();
 // 环境粒子
-for(let i=0;i<24;i++){
+for(let i=0;i<12;i++){
   ambient.push({
     x:(Math.random()-0.5)*CFG.W, y:(Math.random()-0.5)*CFG.H,
     r:1+Math.random()*2.5, s:8+Math.random()*20, a:0.15+Math.random()*0.3,
