@@ -1357,7 +1357,8 @@ function startGame(){
   modeTimer = MODES[gameMode].timeLimit || 0;
   for(const t of dailyTasks){ t.progress=0; }
   resetPlatforms();
-  canLaunch=true; reviveAim=false;
+  projectile=null; canLaunch=true; reviveAim=false; charging=false; charge=0; chargeT=0;
+  trail=[];
   buildButtons();
 }
 function restart(){
@@ -1379,7 +1380,8 @@ function restart(){
   modeTimer = MODES[gameMode].timeLimit || 0;
   for(const t of dailyTasks){ t.progress=0; }
   resetPlatforms();
-  canLaunch=true; reviveAim=false;
+  projectile=null; canLaunch=true; reviveAim=false; charging=false; charge=0; chargeT=0;
+  trail=[];
   state='playing';
   buildButtons();
 }
@@ -1440,8 +1442,12 @@ buildButtons();
 let last=performance.now();
 function loop(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now;
-  update(dt);
-  render();
+  try{
+    update(dt);
+    render();
+  }catch(e){
+    console.error('Game loop error:',e);
+  }
   requestAnimationFrame(loop);
 }
 function update(dt){
