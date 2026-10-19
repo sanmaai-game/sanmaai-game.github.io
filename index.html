@@ -1232,14 +1232,16 @@ function handleButton(x,y){
 function buildButtons(){
   uiButtons=[];
   if(state==='start'){
-    uiButtons.push(btn(0,-20,280,80,'开始游戏','#FF6E40',startGame));
-    uiButtons.push(btn(-150,-130,130,50,'模式','#5a64c8',()=>{ state='modes'; buildButtons(); }));
-    uiButtons.push(btn(0,-130,130,50,'商店','#FF9800',()=>{ state='shop'; buildButtons(); }));
-    uiButtons.push(btn(150,-130,130,50,'签到','#1DD1A1',()=>{ state='checkin'; buildButtons(); }));
-    uiButtons.push(btn(-150,-200,130,50,'成就','#9B59B6',()=>{ state='achievements'; buildButtons(); }));
-    uiButtons.push(btn(0,-200,130,50,'转盘','#EE5A6F',()=>{ state='wheel'; buildButtons(); }));
-    uiButtons.push(btn(150,-200,130,50,'排行','#5a64c8',()=>{ state='settlement'; buildButtons(); }));
-    uiButtons.push(btn(0,-270,280,46,muted?'🔇 已静音':'🔊 声音开','#505064',toggleMute));
+    // 主 CTA：开始游戏
+    uiButtons.push(btn(0,120,320,96,'开始游戏','#FF6E40',startGame));
+    // 底部功能图标行（6个小圆钮）
+    const icons=[['🎮','模式','modes'],['🛒','商店','shop'],['📅','签到','checkin'],['🏆','成就','achievements'],['🎡','转盘','wheel'],['🏅','排行','settlement']];
+    icons.forEach((it,i)=>{
+      const bx=-275+i*110;
+      uiButtons.push(btn(bx,-480,88,88,it[0],'#232840',()=>{ state=it[2]; buildButtons(); }));
+    });
+    // 声音开关（右上角）
+    uiButtons.push(btn(CFG.W/2-60,CFG.H/2-60,56,56,muted?'🔇':'🔊','#232840',toggleMute));
   } else if(state==='playing'){
     uiButtons.push(btn(CFG.W/2-50,CFG.H/2-60,60,60,'⏸','#3c3c50',pauseGame));
     // 主动技能栏（右下角，2行3列）
@@ -1731,10 +1733,8 @@ function render(){
   let sx=0,sy=0;
   if(shakeT>0){ sx=(Math.random()-0.5)*camShake; sy=(Math.random()-0.5)*camShake; }
   ctx.translate(CFG.W/2+sx, CFG.H/2+sy);
-  // 背景
-  const bg=ctx.createLinearGradient(0,-CFG.H/2,0,CFG.H/2);
-  bg.addColorStop(0,'#0d0f1e'); bg.addColorStop(0.5,'#161832'); bg.addColorStop(1,'#1a1030');
-  ctx.fillStyle=bg;
+  // 背景（使用预创建渐变）
+  ctx.fillStyle=bgGrad;
   ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,CFG.H);
   // 环境粒子（背景星点）
   for(const a of ambient){
@@ -1743,13 +1743,9 @@ function render(){
     ctx.beginPath(); ctx.arc(a.x,a.y,a.r,0,Math.PI*2); ctx.fill();
   }
   ctx.globalAlpha=1;
-  // 光晕
-  const g=ctx.createRadialGradient(200,500,0,200,500,320);
-  g.addColorStop(0,'rgba(140,90,220,0.22)'); g.addColorStop(1,'rgba(140,90,220,0)');
-  ctx.fillStyle=g; ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,CFG.H);
-  const g2=ctx.createRadialGradient(-200,-300,0,-200,-300,250);
-  g2.addColorStop(0,'rgba(255,110,64,0.10)'); g2.addColorStop(1,'rgba(255,110,64,0)');
-  ctx.fillStyle=g2; ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,CFG.H);
+  // 光晕（使用预创建渐变）
+  ctx.fillStyle=glowGrad1; ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,CFG.H);
+  ctx.fillStyle=glowGrad2; ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,CFG.H);
   // 地面条
   ctx.fillStyle='#283250';
   ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,60);
@@ -1760,12 +1756,10 @@ function render(){
   for(const p of platforms){
     const flashing = p.flash>0;
     const wxColor = WX_COLOR[p.wx] || '#78c8ff';
-    ctx.shadowColor = flashing ? '#ffffff' : wxColor;
-    ctx.shadowBlur = flashing ? 25 : 10;
+    // 性能优化：去掉 shadowBlur，用亮色模拟发光
     ctx.fillStyle = flashing ? '#ffffff' : wxColor;
     roundRect(ctx,p.x-p.w/2,p.y-CFG.pHeight/2,p.w,CFG.pHeight,4);
     ctx.fill();
-    ctx.shadowBlur=0;
     // 顶面高光线
     ctx.fillStyle = flashing ? '#ffffff' : 'rgba(255,255,255,0.4)';
     roundRect(ctx,p.x-p.w/2+2,p.y-CFG.pHeight/2+1,p.w-4,3,1);
@@ -1923,37 +1917,37 @@ function render(){
     ctx.arc(it.x,it.y,r+6,-Math.PI/2,-Math.PI/2+Math.PI*2*lifeRatio);
     ctx.stroke();
   }
-  // 蛇身连接线（相邻积木之间）
+  // 蛇身连接线（相邻积木之间）——限制最多画50段，避免过长
   if(settledBlocks.length>1){
-    ctx.strokeStyle='rgba(255,215,100,0.45)';
+    ctx.strokeStyle='rgba(255,215,100,0.35)';
     ctx.lineWidth=CFG.blockSize*0.55;
     ctx.lineCap='round';
     ctx.beginPath();
-    ctx.moveTo(settledBlocks[0].x, settledBlocks[0].y);
-    for(let i=1;i<settledBlocks.length;i++){
+    const start=Math.max(0,settledBlocks.length-50);
+    ctx.moveTo(settledBlocks[start].x, settledBlocks[start].y);
+    for(let i=start+1;i<settledBlocks.length;i++){
       ctx.lineTo(settledBlocks[i].x, settledBlocks[i].y);
     }
     ctx.stroke();
   }
-  // 已固定积木（蛇身节）
+  // 已固定积木（蛇身节）——去掉所有 shadowBlur，性能优化
   const n=settledBlocks.length;
   for(let i=0;i<n;i++){
     const b=settledBlocks[i];
     const isHead = (i===n-1);
-    // 蛇身颜色渐变：从尾到头
     const t = n>1 ? i/(n-1) : 0;
     let bodyColor;
     if(b.perfect){ bodyColor='#FFD764'; }
-    else {
-      // 橙红渐变：尾部偏红，头部偏金
-      bodyColor = `hsl(${lerp(20,48,t)}, 90%, ${lerp(50,58,t)}%)`;
-    }
-    if(isHead){ ctx.shadowColor='#FFD764'; ctx.shadowBlur=22; }
-    else if(b.perfect){ ctx.shadowColor='#FFD764'; ctx.shadowBlur=14; }
+    else { bodyColor = `hsl(${lerp(20,48,t)}, 90%, ${lerp(50,58,t)}%)`; }
     ctx.fillStyle=bodyColor;
     roundRect(ctx,b.x-CFG.blockSize/2,b.y-CFG.blockSize/2,CFG.blockSize,CFG.blockSize,8);
     ctx.fill();
-    ctx.shadowBlur=0;
+    // 头部用亮色描边代替阴影
+    if(isHead){
+      ctx.strokeStyle='#FFD764'; ctx.lineWidth=2;
+      roundRect(ctx,b.x-CFG.blockSize/2,b.y-CFG.blockSize/2,CFG.blockSize,CFG.blockSize,8);
+      ctx.stroke();
+    }
     // 高光
     ctx.fillStyle='rgba(255,255,255,0.22)';
     roundRect(ctx,b.x-CFG.blockSize/2+3,b.y-CFG.blockSize/2+3,CFG.blockSize-6,4,2);
@@ -1982,11 +1976,9 @@ function render(){
     ctx.save();
     ctx.translate(pr.x,pr.y);
     ctx.rotate(pr.rot);
-    ctx.shadowColor=pColor; ctx.shadowBlur=20;
     ctx.fillStyle=pColor;
     roundRect(ctx,-CFG.blockSize/2,-CFG.blockSize/2,CFG.blockSize,CFG.blockSize,6);
     ctx.fill();
-    ctx.shadowBlur=0;
     ctx.fillStyle='rgba(255,255,255,0.3)';
     roundRect(ctx,-CFG.blockSize/2+3,-CFG.blockSize/2+3,CFG.blockSize-6,5,2);
     ctx.fill();
@@ -2049,13 +2041,11 @@ function render(){
     ctx.strokeStyle='rgba(255,255,255,0.75)';
     ctx.lineWidth=3;
     ctx.setLineDash([8,8]);
-    ctx.shadowColor='#ffffff'; ctx.shadowBlur=8;
     ctx.beginPath();
     ctx.moveTo(pts[0].x,pts[0].y);
     for(let i=1;i<end;i++) ctx.lineTo(pts[i].x,pts[i].y);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.shadowBlur=0;
     const last=pts[end-1];
     ctx.fillStyle='rgba(255,255,255,0.95)';
     ctx.beginPath(); ctx.arc(last.x,last.y,6,0,Math.PI*2); ctx.fill();
@@ -2098,24 +2088,39 @@ function drawUI(){
   ctx.save();
   ctx.translate(CFG.W/2,CFG.H/2);
   if(state==='start'){
-    ctx.fillStyle='rgba(18,20,36,0.92)';
+    // 深色蒙版
+    ctx.fillStyle='rgba(13,15,30,0.88)';
     ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,CFG.H);
-    drawText('蓄力弹射建造',0,330,52,'#FFD764');
-    drawText('阴阳相生 · 五行流转 · 八卦护佑',0,285,22,'#c8c8dc');
-    drawText('收集爱情·事业·家庭·幸福·房子·车子·票子',0,260,14,'#FFD764');
-    drawText('🔥 连击金币雨 · 抖音礼物 · 段位飞升 · 多弹齐发',0,236,13,'#FF6E40');
-    drawText('🐦愤怒小鸟 · 🎯跳一跳连跳 · 🧟植物大战僵尸',0,216,13,'#7EC8E3');
+    // 顶部装饰细线
+    ctx.strokeStyle='rgba(0,245,255,0.25)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(-120,478); ctx.lineTo(120,478); ctx.stroke();
+    // 大标题（金色 + 青色霓虹发光，只画一次阴影）
+    ctx.save();
+    ctx.shadowColor='rgba(0,245,255,0.9)'; ctx.shadowBlur=28;
+    drawText('蓄力弹射建造',0,430,64,'#FFD764');
+    ctx.restore();
+    // 副标题
+    drawText('积 木 堆 塔 · 弹 射 连 击',0,380,20,'rgba(200,220,255,0.85)');
+    // 时辰slogan（保留特色，只一行）
     const sc0=getShichen();
-    drawText(`当下 ${sc0.name} · ${sc0.meridian}`,0,188,17,'#FFD764');
-    drawText(sc0.tip,0,166,13,'#9bb0d0');
-    drawText('金木水火土 · 子丑寅卯 · 乾兑离震巽坎艮坤',0,142,12,'#7a8aa8');
-    drawText(`最高分：${hiScore}   💰 ${coins}`,0,120,28,'#fff');
-    // 等级与经验
+    drawText(`${sc0.name} · ${sc0.tip}`,0,344,14,'rgba(155,176,208,0.7)');
+    // 最高分 + 金币
+    drawText(`最高分 ${hiScore}`,-90,296,20,'rgba(255,255,255,0.9)');
+    drawText(`💰 ${coins}`,110,296,20,'#FFD764');
+    // 经验条（极简）
     const lv=Save.level, lvExp=Save.exp, lvNeed=lv*100;
-    drawText(`Lv.${lv}  经验 ${lvExp}/${lvNeed}`,0,85,16,'#FFD764');
-    // 经验条
-    ctx.fillStyle='rgba(255,255,255,0.15)'; ctx.fillRect(-150,70,300,8);
-    ctx.fillStyle='#FFD764'; ctx.fillRect(-150,70,300*Math.min(1,lvExp/lvNeed),8);
+    ctx.fillStyle='rgba(255,255,255,0.1)'; roundRect(ctx,-110,262,220,5,3); ctx.fill();
+    ctx.fillStyle='#00F5FF'; roundRect(ctx,-110,262,220*Math.min(1,lvExp/lvNeed),5,3); ctx.fill();
+    drawText(`LV.${lv}`,150,264,14,'rgba(0,245,255,0.9)');
+    // 开始按钮呼吸光晕（静态圆环，无阴影）
+    const pulse=0.5+0.5*Math.sin(performance.now()*0.004);
+    ctx.strokeStyle=`rgba(255,110,64,${0.3+pulse*0.4})`; ctx.lineWidth=2;
+    roundRect(ctx,-170,64,340,112,28); ctx.stroke();
+    // 操作提示
+    drawText('按住蓄力 · 松手发射',0,20,15,'rgba(155,176,208,0.8)');
+    // 功能图标行标签
+    const labels=['模式','商店','签到','成就','转盘','排行'];
+    labels.forEach((lb,i)=>{ drawText(lb,-275+i*110,-532,13,'rgba(155,176,208,0.75)'); });
     drawButtons();
   } else if(state==='playing'){
     // 分数 + 段位
@@ -2406,6 +2411,17 @@ for(let i=0;i<40;i++){
     hue: Math.random()<0.5 ? 260 : 30
   });
 }
+// 预创建渐变（性能优化：避免每帧创建）
+let bgGrad=null, glowGrad1=null, glowGrad2=null;
+function initGradients(){
+  bgGrad=ctx.createLinearGradient(0,-CFG.H/2,0,CFG.H/2);
+  bgGrad.addColorStop(0,'#0d0f1e'); bgGrad.addColorStop(0.5,'#161832'); bgGrad.addColorStop(1,'#1a1030');
+  glowGrad1=ctx.createRadialGradient(200,500,0,200,500,320);
+  glowGrad1.addColorStop(0,'rgba(140,90,220,0.22)'); glowGrad1.addColorStop(1,'rgba(140,90,220,0)');
+  glowGrad2=ctx.createRadialGradient(-200,-300,0,-200,-300,250);
+  glowGrad2.addColorStop(0,'rgba(255,110,64,0.10)'); glowGrad2.addColorStop(1,'rgba(255,110,64,0)');
+}
+initGradients();
 requestAnimationFrame(loop);
 </script>
 </body>
