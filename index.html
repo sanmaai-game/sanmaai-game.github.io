@@ -104,7 +104,7 @@ const CFG = {
   chargeTime: 1.0, chargePower: 1.5, minChargeRatio: 0.05,
   launchX: -280, launchY: -420,
   minAngle: 25, maxAngle: 82, maxSpeed: 820,
-  trajCount: 40, trajTime: 1.6, trajShow: 0.65,
+  trajCount: 40, trajTime: 1.6, trajShow: 1,
   gravity: 900,
   pBaseW: 110, pMinW: 42, pTol: 8,
   pBaseSpace: 130, pMaxSpaceGrow: 140,
@@ -387,6 +387,8 @@ let charge=0, chargeT=0, charging=false, aimAngle=deg2rad(53);
 let canLaunch=true, reviveAim=false;
 let camShake=0, shakeT=0;
 let particles=[], settledBlocks=[], floatTexts=[], trail=[];
+let launcherX=CFG.launchX, launcherTarget=CFG.launchX, launchCount=0; // 动态发球器
+let taijiRot=0, taijiBoost=0; // 太极旋转状态
 let foods=[]; // 空中食物 {x,y,r,value,pulse}
 let items=[]; // 掉落道具 {x,y,type,r,pulse,life}
 let coins=Save.coins; // 金币
@@ -725,14 +727,18 @@ function spawnFood(){
   const y = minY + Math.random()*(maxY-minY);
   const x = (Math.random()-0.3)*CFG.W*0.5;
   const r=Math.random();
-  // 25% 抖音礼物，30% 人生福报，45% 十二生肖
-  if(r<0.25){
+  // 12% 大金球，20% 抖音礼物，28% 人生福报，40% 十二生肖
+  if(r<0.12){
+    // 大金球：超级大奖
+    foods.push({x,y,r:28,value:50,name:'大金球',emoji:'💎',pulse:Math.random()*Math.PI*2,
+      life:14+Math.random()*4,fortune:false,big:true,color:'#FFD700'});
+  } else if(r<0.32){
     const g=pickGift();
     // 礼物越大越显眼
     foods.push({x,y,r:14+g.level*4,value:g.value,name:g.name,emoji:g.emoji,
       pulse:Math.random()*Math.PI*2,life:12+Math.random()*6,
       fortune:false,gift:true,color:g.color,level:g.level});
-  } else if(r<0.55){
+  } else if(r<0.60){
     const f=pickFortune();
     foods.push({x,y,r:f.value>=12?20:16,value:f.value,name:f.name,emoji:f.emoji,pulse:Math.random()*Math.PI*2,life:10+Math.random()*5,fortune:true,color:f.color});
   } else {
@@ -765,6 +771,21 @@ function eatFood(f){
     if(f.level>=6) baseValue *= 2; // 嘉年华再翻倍
   }
   const fvalue = Math.max(1, Math.floor(baseValue));
+  // 大金球：金币+分数大爆发
+  if(f.big){
+    const bv=Math.floor(fvalue*tier.mult*cMult);
+    score+=bv; coins+=30; Save.coins=coins;
+    if(score>hiScore){ hiScore=score; Save.hi=hiScore; newRecordT=1.6; }
+    screenFlash=0.7; hitstop=0.08; camShake=8; shakeT=0.15;
+    for(let i=0;i<20;i++){ const a=Math.random()*Math.PI*2, sp=80+Math.random()*260;
+      particles.push({x:f.x,y:f.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.5,max:1,size:3+Math.random()*6,color:['#FFD700','#fff','#FFA502'][i%3]}); }
+    floatTexts.push({text:`💎 大金球！+${bv}分 +30金币`,x:f.x,y:f.y,vy:-110,life:1.6,max:1.6,color:'#FFD700',size:34,scale:1.6,big:true});
+    if(coinRainT<=0 && Math.random()<0.5) startCoinRain(3);
+    totalFoods++;
+    updateLiveTask('food',1);
+    sfx.unlock();
+    return;
+  }
   score += fvalue;
   if(score>hiScore){ hiScore=score; Save.hi=hiScore; newRecordT=1.6; }
   // 吃食物粒子
@@ -912,7 +933,7 @@ function isFrenzy(){ return frenzy>0; }
 /* ==================== 弹道预览 ==================== */
 function sampleTrajectory(speed,angle){
   const pts=[];
-  const sx=CFG.launchX, sy=CFG.launchY+scrollOffset;
+  const sx=launcherX, sy=CFG.launchY+scrollOffset;
   const vx=speed*Math.cos(angle), vy=speed*Math.sin(angle);
   const dt=CFG.trajTime/CFG.trajCount;
   for(let i=0;i<=CFG.trajCount;i++){
@@ -945,7 +966,7 @@ function pointerUp(e){
   if(tutorialActive && tutorialStep===2) tutorialStep=3;
 }
 function updateAim(p){
-  const dx=p.x-CFG.launchX, dy=p.y-CFG.launchY;
+  const dx=p.x-launcherX, dy=p.y-CFG.launchY;
   aimAngle=clamp(Math.atan2(dy,dx), deg2rad(CFG.minAngle), deg2rad(CFG.maxAngle));
 }
 canvas.addEventListener('mousedown',pointerDown);
@@ -959,6 +980,9 @@ function fire(){
   if(!canLaunch||state!=='playing') return;
   if(charge<CFG.minChargeRatio){ canLaunch=true; return; }
   canLaunch=false;
+  launchCount++;
+  if(launchCount%2===0) launcherTarget=(Math.random()*2-1)*280; // 发球器左右游走
+  taijiBoost=1; // 发射瞬间太极加速旋转
   const speed=charge*CFG.maxSpeed;
   const vx=speed*Math.cos(aimAngle), vy=speed*Math.sin(aimAngle);
   const priv = getPrivilege(score);
@@ -967,7 +991,7 @@ function fire(){
   const bird = pickBird();
   let mainSpeed = speed;
   if(bird.effect==='speed') mainSpeed *= 1.6; // 黄鸟加速
-  projectile={x:CFG.launchX,y:CFG.launchY+scrollOffset,
+  projectile={x:launcherX,y:CFG.launchY+scrollOffset,
     vx:mainSpeed*Math.cos(aimAngle), vy:mainSpeed*Math.sin(aimAngle),
     settled:false,dead:false,rot:0,wx:projWx,bird:bird,pierce:priv.pierce,explode:priv.explode,
     pierceCount:priv.pierce?3:0, eggT:bird.effect==='egg'?0.5:0};
@@ -978,7 +1002,7 @@ function fire(){
     const spread = (i+1) * 0.06 * (i%2===0?1:-1); // 散射角度
     const ang = aimAngle + spread;
     const b2 = pickBird();
-    extraProjectiles.push({x:CFG.launchX,y:CFG.launchY+scrollOffset,
+    extraProjectiles.push({x:launcherX,y:CFG.launchY+scrollOffset,
       vx:speed*Math.cos(ang), vy:speed*Math.sin(ang),
       settled:false,dead:false,rot:0,wx:WUXING[Math.floor(Math.random()*5)],
       bird:b2,pierce:priv.pierce,explode:priv.explode,pierceCount:priv.pierce?3:0,
@@ -988,7 +1012,7 @@ function fire(){
   if(bird.effect==='split'){
     for(let i=0;i<2;i++){
       const ang = aimAngle + (i===0?0.1:-0.1);
-      extraProjectiles.push({x:CFG.launchX,y:CFG.launchY+scrollOffset,
+      extraProjectiles.push({x:launcherX,y:CFG.launchY+scrollOffset,
         vx:speed*0.85*Math.cos(ang), vy:speed*0.85*Math.sin(ang),
         settled:false,dead:false,rot:0,wx:projWx,bird:bird,pierce:false,explode:false,
         pierceCount:0,eggT:0,isExtra:true});
@@ -1216,7 +1240,7 @@ function onFail(){
   if(shield){
     // 护盾：不掉连击，只消耗护盾
     shield=false; shieldT=0;
-    floatTexts.push({text:'护盾抵消！',x:CFG.launchX,y:CFG.launchY+40,vy:-80,life:1.2,max:1.2,color:'#88ff88',size:28,scale:1.2});
+    floatTexts.push({text:'护盾抵消！',x:launcherX,y:CFG.launchY+40,vy:-80,life:1.2,max:1.2,color:'#88ff88',size:28,scale:1.2});
     screenFlash=0.3;
     sfx.click();
   } else {
@@ -1358,7 +1382,7 @@ function startGame(){
   for(const t of dailyTasks){ t.progress=0; }
   resetPlatforms();
   projectile=null; canLaunch=true; reviveAim=false; charging=false; charge=0; chargeT=0;
-  trail=[];
+  trail=[]; launcherX=CFG.launchX; launcherTarget=CFG.launchX;
   buildButtons();
 }
 function restart(){
@@ -1381,7 +1405,7 @@ function restart(){
   for(const t of dailyTasks){ t.progress=0; }
   resetPlatforms();
   projectile=null; canLaunch=true; reviveAim=false; charging=false; charge=0; chargeT=0;
-  trail=[];
+  trail=[]; launcherX=CFG.launchX; launcherTarget=CFG.launchX;
   state='playing';
   buildButtons();
 }
@@ -1497,9 +1521,9 @@ function update(dt){
     projectile.x += projectile.vx*dt;
     projectile.y += projectile.vy*dt;
     projectile.rot += projectile.vx*0.001;
-    // 拖尾
-    trail.push({x:projectile.x,y:projectile.y,life:0.25,max:0.25});
-    if(trail.length>20) trail.shift();
+    // 珠链拖尾
+    trail.push({x:projectile.x,y:projectile.y,life:0.32,max:0.32});
+    if(trail.length>30) trail.shift();
     // 磁铁：吸附食物
     if(magnet){
       for(const f of foods){
@@ -1714,8 +1738,12 @@ function update(dt){
     liveTaskTimer-=dt;
     if(liveTaskTimer<=0){ liveTask=null; setTimeout(()=>{ if(state==='playing') newLiveTask(); },2000); }
   }
+  // 发球器游走 + 太极旋转
+  launcherX += (launcherTarget-launcherX)*Math.min(1,dt*3);
+  taijiRot += dt*(0.7+taijiBoost*3);
+  if(taijiBoost>0) taijiBoost=Math.max(0,taijiBoost-dt*1.5);
   // 保持食物数量
-  if(foods.length<3 && Math.random()<0.02) spawnFood();
+  if(foods.length<4 && Math.random()<0.04) spawnFood();
   // 粒子
   for(let i=particles.length-1;i>=0;i--){
     const p=particles[i];
@@ -1794,13 +1822,12 @@ function render(){
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(p.wx, p.x, p.y);
   }
-  // 拖尾
+  // 珠链拖尾（白金相间）
   for(let i=0;i<trail.length;i++){
     const t=trail[i];
-    const a=(t.life/t.max)*0.5;
-    ctx.fillStyle=`rgba(255,215,100,${a})`;
-    const sz=CFG.blockSize*0.5*(t.life/t.max);
-    ctx.beginPath(); ctx.arc(t.x,t.y,sz,0,Math.PI*2); ctx.fill();
+    const k=t.life/t.max;
+    ctx.fillStyle=i%2===0?`rgba(255,255,255,${k*0.85})`:`rgba(255,214,100,${k*0.9})`;
+    ctx.beginPath(); ctx.arc(t.x,t.y,2.5+4.5*k,0,Math.PI*2); ctx.fill();
   }
   // 空中食物：十二生肖 / 人生福报 / 抖音礼物
   for(const f of foods){
@@ -1826,6 +1853,15 @@ function render(){
         for(let i=0;i<6;i++){ const a=i*Math.PI/3; ctx.moveTo(Math.cos(a)*r*1.6,Math.sin(a)*r*1.6); ctx.lineTo(Math.cos(a)*r*2.2,Math.sin(a)*r*2.2); }
         ctx.stroke(); ctx.restore();
       }
+    }
+    // 大金球旋转虚线光环
+    if(f.big){
+      ctx.save(); ctx.translate(f.x,f.y); ctx.rotate(performance.now()*0.002);
+      ctx.strokeStyle='rgba(255,215,0,0.85)'; ctx.lineWidth=2;
+      ctx.setLineDash([7,7]);
+      ctx.beginPath(); ctx.arc(0,0,r+10,0,Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
     }
     ctx.shadowColor=glowColor; ctx.shadowBlur=isBigGift?25+p*15:15+p*10;
     ctx.fillStyle= isGift ? `${f.color}aa` : (f.fortune ? `${f.color}66` : (isDragon?'rgba(255,215,0,0.4)':'rgba(255,215,100,0.3)'));
@@ -2035,46 +2071,50 @@ function render(){
   ctx.globalAlpha=1;
   ctx.restore();
 
-  // 发射点（阴阳太极图）
+  // 发射点（阴阳太极·左白右黑，左升右降，持续旋转）
+  const lx=launcherX, ly=CFG.launchY, R=34;
   const pulse = 0.5+0.5*Math.sin(performance.now()*0.005);
-  ctx.shadowColor='#FF6E40'; ctx.shadowBlur=15+pulse*10;
-  const lx=CFG.launchX, ly=CFG.launchY, R=22;
-  // 太极底色
-  ctx.fillStyle='#1a1a2e';
-  ctx.beginPath(); ctx.arc(lx,ly,R,0,Math.PI*2); ctx.fill();
-  // 阴（黑）阳（白）两仪
-  ctx.fillStyle='#fff';
-  ctx.beginPath(); ctx.arc(lx,ly,R,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#1a1a2e';
-  ctx.beginPath(); ctx.arc(lx,ly,R,Math.PI*0.5,Math.PI*1.5); ctx.fill();
-  ctx.fillStyle='#fff';
-  ctx.beginPath(); ctx.arc(lx,ly-R/2,R/2,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#1a1a2e';
-  ctx.beginPath(); ctx.arc(lx,ly+R/2,R/2,0,Math.PI*2); ctx.fill();
-  // 阴阳鱼眼
-  ctx.fillStyle='#1a1a2e';
-  ctx.beginPath(); ctx.arc(lx,ly-R/2,4,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#fff';
-  ctx.beginPath(); ctx.arc(lx,ly+R/2,4,0,Math.PI*2); ctx.fill();
-  ctx.shadowBlur=0;
+  ctx.save();
+  ctx.translate(lx,ly);
+  // 外圈金环+呼吸光环（发光靠描边）
+  ctx.strokeStyle='rgba(255,214,100,0.95)'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(0,0,R+5,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle=`rgba(255,255,255,${0.18+0.3*pulse})`; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(0,0,R+11+pulse*3,0,Math.PI*2); ctx.stroke();
+  ctx.rotate(taijiRot);
+  // 左白右黑：整体白，右半黑
+  ctx.fillStyle='#f5f6fa';
+  ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#16162a';
+  ctx.beginPath(); ctx.arc(0,0,R,-Math.PI/2,Math.PI/2); ctx.fill();
+  // S曲线：白鱼头在上（升），黑鱼头在下（降）
+  ctx.fillStyle='#f5f6fa';
+  ctx.beginPath(); ctx.arc(0,-R/2,R/2,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#16162a';
+  ctx.beginPath(); ctx.arc(0,R/2,R/2,0,Math.PI*2); ctx.fill();
+  // 鱼眼
+  ctx.fillStyle='#16162a';
+  ctx.beginPath(); ctx.arc(0,-R/2,R/8,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#f5f6fa';
+  ctx.beginPath(); ctx.arc(0,R/2,R/8,0,Math.PI*2); ctx.fill();
+  ctx.restore();
 
-  // 弹道预览（发光虚线）
+  // 弹道预览（珠链，全程显示）
   if(charging){
     const speed=charge*CFG.maxSpeed;
     const pts=sampleTrajectory(speed,aimAngle);
     const ratio=reviveAim?1:CFG.trajShow;
-    const end=Math.floor(pts.length*ratio);
-    ctx.strokeStyle='rgba(255,255,255,0.75)';
-    ctx.lineWidth=3;
-    ctx.setLineDash([8,8]);
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x,pts[0].y);
-    for(let i=1;i<end;i++) ctx.lineTo(pts[i].x,pts[i].y);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    const end=Math.max(2,Math.floor(pts.length*ratio));
+    for(let i=0;i<end;i+=3){
+      const k=i/(end-1);
+      ctx.fillStyle=(i%6===0)?'rgba(255,214,100,0.95)':'rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y,3+4*k,0,Math.PI*2); ctx.fill();
+    }
     const last=pts[end-1];
-    ctx.fillStyle='rgba(255,255,255,0.95)';
-    ctx.beginPath(); ctx.arc(last.x,last.y,6,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#FFD700';
+    ctx.beginPath(); ctx.arc(last.x,last.y,8,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(last.x,last.y,8,0,Math.PI*2); ctx.stroke();
   }
 
   // 浮动文字
@@ -2106,6 +2146,15 @@ function render(){
     grd.addColorStop(0,'rgba(255,0,60,0)');
     grd.addColorStop(1,`rgba(255,0,60,${fa})`);
     ctx.fillStyle=grd;
+    ctx.fillRect(0,0,CFG.W,CFG.H);
+  }
+  // 连击高光：连击越高画面越金
+  if(combo>=5){
+    const ca=Math.min(0.15,combo*0.01);
+    const grdC=ctx.createRadialGradient(CFG.W/2,CFG.H/2,CFG.H*0.25,CFG.W/2,CFG.H/2,CFG.H*0.7);
+    grdC.addColorStop(0,'rgba(255,200,60,0)');
+    grdC.addColorStop(1,`rgba(255,200,60,${ca})`);
+    ctx.fillStyle=grdC;
     ctx.fillRect(0,0,CFG.W,CFG.H);
   }
 
@@ -2362,14 +2411,14 @@ function drawUI(){
     ctx.save();
     ctx.globalCompositeOperation='destination-out';
     ctx.beginPath();
-    ctx.arc(CFG.launchX, CFG.launchY, 70, 0, Math.PI*2);
+    ctx.arc(launcherX, CFG.launchY, 70, 0, Math.PI*2);
     ctx.fill();
     ctx.restore();
     // 手指动画
     const t = performance.now()*0.004;
     const fingerY = CFG.launchY + 60 + Math.sin(t)*10;
     ctx.font='50px sans-serif'; ctx.textAlign='center';
-    ctx.fillText('👆', CFG.launchX, fingerY);
+    ctx.fillText('👆', launcherX, fingerY);
     // 提示文字
     const tips = {
       1:'按住屏幕蓄力',
