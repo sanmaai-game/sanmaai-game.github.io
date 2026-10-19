@@ -389,6 +389,10 @@ let camShake=0, shakeT=0;
 let particles=[], settledBlocks=[], floatTexts=[], trail=[];
 let launcherX=CFG.launchX, launcherTarget=CFG.launchX, launchCount=0; // 动态发球器
 let taijiRot=0, taijiBoost=0; // 太极旋转状态
+let shockwaves=[]; // 冲击波特效 {x,y,maxR,life,max,color}
+const SCORE_MILESTONES=[10000,100000,1000000,10000000];
+const SCORE_MILESTONE_NAMES=['一万','十万','百万','千万'];
+let scoreMilestone=0; // 已达成分数里程碑数
 let foods=[]; // 空中食物 {x,y,r,value,pulse}
 let items=[]; // 掉落道具 {x,y,type,r,pulse,life}
 let coins=Save.coins; // 金币
@@ -754,7 +758,7 @@ function eatFood(f){
     sun++;
     const sunCoin = 5 + Math.floor(sun*0.5);
     coins += sunCoin; Save.coins=coins;
-    floatTexts.push({text:`☀️ 阳光 +${sunCoin}金币`,x:f.x,y:f.y,vy:-80,life:0.9,max:0.9,color:'#FFD700',size:18,scale:1.1});
+    floatTexts.push({text:`☀️ 阳光 +${sunCoin}金币`,x:f.x,y:f.y-scrollOffset,vy:-80,life:0.9,max:0.9,color:'#FFD700',size:18,scale:1.1});
     for(let j=0;j<10;j++){ const a=Math.random()*Math.PI*2, sp=30+Math.random()*80;
       particles.push({x:f.x,y:f.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.3+Math.random()*0.3,max:0.6,size:2+Math.random()*3,color:'#FFD700'}); }
     sfx.click();
@@ -777,9 +781,10 @@ function eatFood(f){
     score+=bv; coins+=30; Save.coins=coins;
     if(score>hiScore){ hiScore=score; Save.hi=hiScore; newRecordT=1.6; }
     screenFlash=0.7; hitstop=0.08; camShake=8; shakeT=0.15;
+    spawnShockwave(f.x,f.y,180,'rgba(255,215,0,0.95)',0.6);
     for(let i=0;i<20;i++){ const a=Math.random()*Math.PI*2, sp=80+Math.random()*260;
       particles.push({x:f.x,y:f.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.5,max:1,size:3+Math.random()*6,color:['#FFD700','#fff','#FFA502'][i%3]}); }
-    floatTexts.push({text:`💎 大金球！+${bv}分 +30金币`,x:f.x,y:f.y,vy:-110,life:1.6,max:1.6,color:'#FFD700',size:34,scale:1.6,big:true});
+    floatTexts.push({text:`💎 大金球！+${bv}分 +30金币`,x:f.x,y:f.y-scrollOffset,vy:-110,life:1.6,max:1.6,color:'#FFD700',size:34,scale:1.6,big:true});
     if(coinRainT<=0 && Math.random()<0.5) startCoinRain(3);
     totalFoods++;
     updateLiveTask('food',1);
@@ -811,10 +816,10 @@ function eatFood(f){
     if(giftComboCount>=3){
       const giftComboBonus = Math.floor(fvalue * 0.5 * Math.min(giftComboCount,10));
       score += giftComboBonus;
-      floatTexts.push({text:`礼物连击 x${giftComboCount}! +${giftComboBonus}`,x:f.x,y:f.y+40,vy:-60,life:1.2,max:1.2,color:'#FF69B4',size:22,scale:1.2});
+      floatTexts.push({text:`礼物连击 x${giftComboCount}! +${giftComboBonus}`,x:f.x,y:f.y+40-scrollOffset,vy:-60,life:1.2,max:1.2,color:'#FF69B4',size:22,scale:1.2});
     }
     const label = `${f.emoji} ${f.name} +${fvalue}`;
-    floatTexts.push({text:label,x:f.x,y:f.y,vy:-100,life:isMega?1.8:1.2,max:isMega?1.8:1.2,
+    floatTexts.push({text:label,x:f.x,y:f.y-scrollOffset,vy:-100,life:isMega?1.8:1.2,max:isMega?1.8:1.2,
       color:f.color,size:isMega?42:isBig?30:20,scale:isMega?1.8:isBig?1.4:1.1,big:isBig});
     // 顶级礼物飘屏提示 + 触发金币雨
     if(isMega){
@@ -850,12 +855,12 @@ function eatFood(f){
     if(fortuneCount%10===0){
       const bonus=fortuneCount;
       score+=bonus; coins+=bonus; Save.coins=coins;
-      floatTexts.push({text:`🌟 福气x${fortuneCount} +${bonus}`,x:f.x,y:f.y-30,vy:-70,life:1.3,max:1.3,color:'#FFD700',size:24,scale:1.2});
+      floatTexts.push({text:`🌟 福气x${fortuneCount} +${bonus}`,x:f.x,y:f.y-30-scrollOffset,vy:-70,life:1.3,max:1.3,color:'#FFD700',size:24,scale:1.2});
     }
-    floatTexts.push({text:label,x:f.x,y:f.y,vy:-90,life:1.1,max:1.1,color:f.color||'#fff',size:isBig?28:22,scale:isBig?1.4:1.1});
+    floatTexts.push({text:label,x:f.x,y:f.y-scrollOffset,vy:-90,life:1.1,max:1.1,color:f.color||'#fff',size:isBig?28:22,scale:isBig?1.4:1.1});
   } else {
     giftComboCount=0;
-    floatTexts.push({text:`+${fvalue}`,x:f.x,y:f.y,vy:-90,life:0.9,max:0.9,color:'#FFD764',size:24,scale:1.1});
+    floatTexts.push({text:`+${fvalue}`,x:f.x,y:f.y-scrollOffset,vy:-90,life:0.9,max:0.9,color:'#FFD764',size:24,scale:1.1});
     updateLiveTask('food',1);
     totalFoods++;
   }
@@ -866,7 +871,7 @@ function eatFood(f){
 function pickupItem(it){
   if(!it.bagua){
     const def=ITEM_TYPES[it.type];
-    floatTexts.push({text:def.emoji+' '+def.name+'！',x:it.x,y:it.y,vy:-90,life:1.3,max:1.3,color:def.color,size:30,scale:1.3});
+    floatTexts.push({text:def.emoji+' '+def.name+'！',x:it.x,y:it.y-scrollOffset,vy:-90,life:1.3,max:1.3,color:def.color,size:30,scale:1.3});
     sfx.unlock();
     if(it.type==='bomb'){
       let bonus=0; for(const f of foods){ bonus+=f.value*2; }
@@ -875,7 +880,7 @@ function pickupItem(it){
       for(let i=0;i<60;i++){ const a=Math.random()*Math.PI*2, sp=100+Math.random()*400;
         particles.push({x:it.x,y:it.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.5,max:1,size:3+Math.random()*6,color:['#ff4444','#ffaa00','#ffd700'][i%3]}); }
       foods=[];
-      floatTexts.push({text:`清屏 +${bonus}`,x:it.x,y:it.y-40,vy:-60,life:1.5,max:1.5,color:'#ff4444',size:36,scale:1.4,big:true});
+      floatTexts.push({text:`清屏 +${bonus}`,x:it.x,y:it.y-40-scrollOffset,vy:-60,life:1.5,max:1.5,color:'#ff4444',size:36,scale:1.4,big:true});
     } else if(it.type==='magnet'){ magnet=true; magnetT=10; }
     else if(it.type==='double'){ doubleScore=true; doubleT=10; }
     else if(it.type==='shield'){ shield=true; shieldT=999; }
@@ -883,12 +888,12 @@ function pickupItem(it){
   }
   // 八卦道具
   const def=BAGUA[it.type];
-  floatTexts.push({text:def.emoji+' '+def.name+'卦 '+def.desc,x:it.x,y:it.y,vy:-90,life:1.5,max:1.5,color:def.color,size:26,scale:1.3});
+  floatTexts.push({text:def.emoji+' '+def.name+'卦 '+def.desc,x:it.x,y:it.y-scrollOffset,vy:-90,life:1.5,max:1.5,color:def.color,size:26,scale:1.3});
   sfx.unlock();
   switch(it.type){
     case 'qian': // 乾·天：得分+10
       score+=10; coins+=10; Save.coins=coins;
-      floatTexts.push({text:'天赐+10',x:it.x,y:it.y-40,vy:-60,life:1.2,max:1.2,color:'#FFD700',size:30,scale:1.3});
+      floatTexts.push({text:'天赐+10',x:it.x,y:it.y-40-scrollOffset,vy:-60,life:1.2,max:1.2,color:'#FFD700',size:30,scale:1.3});
       break;
     case 'kun': // 坤·地：护盾
       shield=true; shieldT=999; break;
@@ -899,7 +904,7 @@ function pickupItem(it){
       for(let i=0;i<50;i++){ const a=Math.random()*Math.PI*2, sp=80+Math.random()*350;
         particles.push({x:it.x,y:it.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.5,max:1,size:3+Math.random()*5,color:['#9370DB','#FFD700','#fff'][i%3]}); }
       foods=[];
-      floatTexts.push({text:`雷动 +${bz}`,x:it.x,y:it.y-40,vy:-60,life:1.3,max:1.3,color:'#9370DB',size:32,scale:1.3,big:true});
+      floatTexts.push({text:`雷动 +${bz}`,x:it.x,y:it.y-40-scrollOffset,vy:-60,life:1.3,max:1.3,color:'#9370DB',size:32,scale:1.3,big:true});
       break;
     case 'xun': // 巽·风：磁铁
       magnet=true; magnetT=12; break;
@@ -907,15 +912,15 @@ function pickupItem(it){
       doubleScore=true; doubleT=12; break;
     case 'li': // 离·火：狂暴
       frenzy=Math.max(frenzy,6); screenFlash=0.6;
-      floatTexts.push({text:'离火·狂暴！',x:it.x,y:it.y-40,vy:-60,life:1.5,max:1.5,color:'#FF4500',size:32,scale:1.4,big:true});
+      floatTexts.push({text:'离火·狂暴！',x:it.x,y:it.y-40-scrollOffset,vy:-60,life:1.5,max:1.5,color:'#FF4500',size:32,scale:1.4,big:true});
       break;
     case 'gen': // 艮·山：加宽所有平台
       for(const p of platforms){ p.w*=1.3; }
-      floatTexts.push({text:'山固·平台加宽',x:it.x,y:it.y-40,vy:-60,life:1.3,max:1.3,color:'#228B22',size:26,scale:1.2});
+      floatTexts.push({text:'山固·平台加宽',x:it.x,y:it.y-40-scrollOffset,vy:-60,life:1.3,max:1.3,color:'#228B22',size:26,scale:1.2});
       break;
     case 'dui': // 兑·泽：金币奖励
       coins+=50; Save.coins=coins;
-      floatTexts.push({text:'泽润·+50金币',x:it.x,y:it.y-40,vy:-60,life:1.3,max:1.3,color:'#FF69B4',size:26,scale:1.2});
+      floatTexts.push({text:'泽润·+50金币',x:it.x,y:it.y-40-scrollOffset,vy:-60,life:1.3,max:1.3,color:'#FF69B4',size:26,scale:1.2});
       break;
   }
 }
@@ -1048,7 +1053,7 @@ function checkOneLanding(p, isExtra){
         // 穿透也得分（小额）
         const tiny = Math.floor(CFG.baseScore*0.3*getComboMult(combo));
         score += tiny;
-        floatTexts.push({text:`穿透 +${tiny}`,x:bx,y:by,vy:-60,life:0.6,max:0.6,color:'#70A1FF',size:16});
+        floatTexts.push({text:`穿透 +${tiny}`,x:bx,y:by-scrollOffset,vy:-60,life:0.6,max:0.6,color:'#70A1FF',size:16});
         // 穿透粒子
         for(let j=0;j<8;j++){ const a=Math.random()*Math.PI*2, sp=40+Math.random()*100;
           particles.push({x:bx,y:by,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.3+Math.random()*0.3,max:0.6,size:2+Math.random()*3,color:'#70A1FF'}); }
@@ -1065,7 +1070,7 @@ function checkOneLanding(p, isExtra){
         // 额外子弹只加分，不建平台
         const g = Math.floor(CFG.baseScore*0.5*getComboMult(combo)*getTier(score).mult);
         score += g;
-        floatTexts.push({text:`+${g}`,x:bx,y:p.y,vy:-70,life:0.7,max:0.7,color:'#FFD764',size:18});
+        floatTexts.push({text:`+${g}`,x:bx,y:p.y-scrollOffset,vy:-70,life:0.7,max:0.7,color:'#FFD764',size:18});
       } else {
         onSuccess(bx,p.y);
       }
@@ -1096,6 +1101,7 @@ function doExplosion(x,y,radius){
   }
 }
 /* ==================== 成功 / 失败 ==================== */
+function spawnShockwave(x,y,maxR,color,life){ shockwaves.push({x,y,maxR,life:life||0.5,max:life||0.5,color}); }
 function onSuccess(x,y){
   // 教程完成
   if(tutorialActive && tutorialStep===3){
@@ -1114,6 +1120,8 @@ function onSuccess(x,y){
   const distFromCenter = top ? Math.abs(x - top.x) : 999;
   const perfect = top && distFromCenter < top.w*0.15;
   if(perfect) updateLiveTask('perfect',1);
+  // 命中冲击波：完美=青色大环
+  spawnShockwave(x,y,perfect?160:100,perfect?'rgba(0,245,255,0.9)':'rgba(255,214,100,0.9)');
   // 跳一跳：连续完美命中（跳一跳连跳）
   if(perfect){
     jumpCombo++;
@@ -1123,7 +1131,7 @@ function onSuccess(x,y){
   }
   const jumpBonus = perfect ? jumpCombo * CFG.baseScore * 2 : 0;
   if(jumpCombo>=3 && perfect){
-    floatTexts.push({text:`跳一跳 x${jumpCombo}! +${jumpBonus}`,x,y:y-20,vy:-90,life:1.0,max:1.0,color:'#00F5FF',size:24,scale:1.2});
+    floatTexts.push({text:`跳一跳 x${jumpCombo}! +${jumpBonus}`,x,y:y-20-scrollOffset,vy:-90,life:1.0,max:1.0,color:'#00F5FF',size:24,scale:1.2});
   }
   // 五行判定：积木五行 vs 平台五行
   const projWx = projectile.wx || '金';
@@ -1154,7 +1162,7 @@ function onSuccess(x,y){
   gained = Math.max(1, Math.floor(gained));
   score += gained;
   updateLiveTask('score',gained);
-  if(isCrit) floatTexts.push({text:'暴击！',x:x,y:y+30,vy:-60,life:0.8,max:0.8,color:'#FF4757',size:22,scale:1.3});
+  if(isCrit) floatTexts.push({text:'暴击！',x:x,y:y+30-scrollOffset,vy:-60,life:0.8,max:0.8,color:'#FF4757',size:22,scale:1.3});
   // 子午流注时辰buff
   const sc=getShichen();
   let shichenBonus=0;
@@ -1167,11 +1175,22 @@ function onSuccess(x,y){
   const coinGain = (gained+shichenBonus) * (sc.buff==='金币翻倍'?2:1) + (perfect?5:0) + (frenzy>0?gained:0);
   coins += coinGain; Save.coins = coins;
   if(score>hiScore){ hiScore=score; Save.hi=hiScore; newRecordT=1.6; }
+  // 分数里程碑：万→十万→百万→千万 全屏庆祝
+  if(scoreMilestone<SCORE_MILESTONES.length && score>=SCORE_MILESTONES[scoreMilestone]){
+    const mName=SCORE_MILESTONE_NAMES[scoreMilestone];
+    scoreMilestone++;
+    floatTexts.push({text:`🏆 突破${mName}分！`,x:0,y:180,vy:-30,life:2.4,max:2.4,color:'#FFD700',size:46,scale:1.8,big:true});
+    spawnShockwave(x,y,260,'rgba(255,215,0,0.9)',0.7);
+    spawnShockwave(x,y,170,'rgba(0,245,255,0.9)',0.6);
+    screenFlash=0.6; hitstop=Math.max(hitstop,0.12);
+    if(coinRainT<=0) startCoinRain(3);
+    sfx.unlock();
+  }
   // 狂暴模式：连击达到10触发，分数×5，同时触发金币雨
   if(combo>=10 && frenzy<=0){
     frenzy = 10;
     screenFlash=0.9;
-    floatTexts.push({text:'🔥 狂暴！分数×5',x,y:y+100,vy:-60,life:2,max:2,color:'#ff3366',size:50,scale:1.6,big:true});
+    floatTexts.push({text:'🔥 狂暴！分数×5',x,y:y+100-scrollOffset,vy:-60,life:2,max:2,color:'#ff3366',size:50,scale:1.6,big:true});
     sfx.unlock();
     if(coinRainT<=0) startCoinRain(5); // 狂暴必带金币雨
   }
@@ -1195,19 +1214,21 @@ function onSuccess(x,y){
   const label = perfect ? '完美' : (wxText ? wxText : '');
   floatTexts.push({
     text: label ? `${label} +${gained}` : `+${gained}`,
-    x, y, vy:-80, life:1.0, max:1.0,
+    x, y:y-scrollOffset, vy:-80, life:1.0, max:1.0,
     color: perfect ? '#FFD764' : (wxBonus>0?'#88ff88':wxBonus<0?'#ff8888':'#ffffff'),
     size: perfect?34:26,
     scale: perfect?1.3:1.0
   });
   // 金币浮字
-  floatTexts.push({text:`💰+${coinGain}`,x:x+50,y:y+20,vy:-70,life:0.8,max:0.8,color:'#ffd700',size:18,scale:1});
+  floatTexts.push({text:`💰+${coinGain}`,x:x+50,y:y+20-scrollOffset,vy:-70,life:0.8,max:0.8,color:'#ffd700',size:18,scale:1});
   // 连击里程碑
   if(combo===3||combo===5||combo===10||combo===15){
     floatTexts.push({
-      text:`连击 x${combo}!`, x, y:y+60, vy:-120, life:1.4, max:1.4,
+      text:`连击 x${combo}!`, x, y:y+60-scrollOffset, vy:-120, life:1.4, max:1.4,
       color:'#FF6E40', size:48, scale:1.5, big:true
     });
+    spawnShockwave(x,y,150,'rgba(255,110,64,0.95)');
+    spawnShockwave(x,y,90,'rgba(255,255,255,0.9)');
   }
   // 大粒子爆炸
   const baseN = perfect ? 30 : 12;
@@ -1382,7 +1403,7 @@ function startGame(){
   for(const t of dailyTasks){ t.progress=0; }
   resetPlatforms();
   projectile=null; canLaunch=true; reviveAim=false; charging=false; charge=0; chargeT=0;
-  trail=[]; launcherX=CFG.launchX; launcherTarget=CFG.launchX;
+  trail=[]; launcherX=CFG.launchX; launcherTarget=CFG.launchX; shockwaves=[]; scoreMilestone=0;
   buildButtons();
 }
 function restart(){
@@ -1405,7 +1426,7 @@ function restart(){
   for(const t of dailyTasks){ t.progress=0; }
   resetPlatforms();
   projectile=null; canLaunch=true; reviveAim=false; charging=false; charge=0; chargeT=0;
-  trail=[]; launcherX=CFG.launchX; launcherTarget=CFG.launchX;
+  trail=[]; launcherX=CFG.launchX; launcherTarget=CFG.launchX; shockwaves=[]; scoreMilestone=0;
   state='playing';
   buildButtons();
 }
@@ -1499,7 +1520,7 @@ function update(dt){
         combo = 0; jumpCombo = 0;
         screenFlash = Math.max(screenFlash, 0.6);
         camShake = Math.max(camShake, 18); shakeT = 0.18;
-        floatTexts.push({text:`${boss.emoji} 攻击 -${dmg}`,x:boss.x,y:boss.y+50,vy:-50,life:1.0,max:1.0,color:'#FF4757',size:22,scale:1.2});
+        floatTexts.push({text:`${boss.emoji} 攻击 -${dmg}`,x:boss.x,y:boss.y+50-scrollOffset,vy:-50,life:1.0,max:1.0,color:'#FF4757',size:22,scale:1.2});
       }
     }
   }
@@ -1549,7 +1570,7 @@ function update(dt){
       const pickupR = c.r+CFG.blockSize/2+8;
       if(dx*dx+dy*dy < pickupR*pickupR){
         coins += c.value; Save.coins = coins;
-        floatTexts.push({text:`💰+${c.value}`,x:c.x,y:c.y,vy:-100,life:0.7,max:0.7,color:'#FFD700',size:16+c.value*0.5,scale:1.1});
+        floatTexts.push({text:`💰+${c.value}`,x:c.x,y:c.y-scrollOffset,vy:-100,life:0.7,max:0.7,color:'#FFD700',size:16+c.value*0.5,scale:1.1});
         // 金币粒子
         for(let j=0;j<6;j++){ const a=Math.random()*Math.PI*2, sp=30+Math.random()*80;
           particles.push({x:c.x,y:c.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp+30,life:0.3+Math.random()*0.3,max:0.6,size:2+Math.random()*3,color:'#FFD700'}); }
@@ -1585,7 +1606,7 @@ function update(dt){
         p.eggT = 0.6;
         const egg = Math.floor(CFG.baseScore*0.8*getComboMult(combo)*getTier(score).mult);
         score += egg;
-        floatTexts.push({text:`🥚+${egg}`,x:p.x,y:p.y,vy:-80,life:0.6,max:0.6,color:'#F1F2F6',size:16});
+        floatTexts.push({text:`🥚+${egg}`,x:p.x,y:p.y-scrollOffset,vy:-80,life:0.6,max:0.6,color:'#F1F2F6',size:16});
         for(let j=0;j<5;j++){ const a=Math.random()*Math.PI*2, sp=30+Math.random()*60;
           particles.push({x:p.x,y:p.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp+20,life:0.3+Math.random()*0.3,max:0.6,size:2+Math.random()*3,color:'#F1F2F6'}); }
       }
@@ -1665,7 +1686,7 @@ function update(dt){
         combo = 0; jumpCombo = 0;
         screenFlash = Math.max(screenFlash, 0.5);
         camShake = Math.max(camShake, 15); shakeT = 0.15;
-        floatTexts.push({text:`-${dmg}`,x:z.x,y:z.y,vy:-60,life:0.8,max:0.8,color:'#FF4757',size:22,scale:1.2});
+        floatTexts.push({text:`-${dmg}`,x:z.x,y:z.y-scrollOffset,vy:-60,life:0.8,max:0.8,color:'#FF4757',size:22,scale:1.2});
       }
     }
     // 僵尸飞出左侧
@@ -1699,7 +1720,7 @@ function update(dt){
           const zScore = z.type==='boss'? 500 : 100;
           score += zScore;
           coins += Math.floor(zScore*0.1); Save.coins=coins;
-          floatTexts.push({text:`击杀僵尸 +${zScore}`,x:z.x,y:z.y,vy:-80,life:1.0,max:1.0,color:'#2ED573',size:22,scale:1.2});
+          floatTexts.push({text:`击杀僵尸 +${zScore}`,x:z.x,y:z.y-scrollOffset,vy:-80,life:1.0,max:1.0,color:'#2ED573',size:22,scale:1.2});
           updateLiveTask('kill',1);
           totalZombies++;
           for(let j=0;j<15;j++){ const a=Math.random()*Math.PI*2, sp=60+Math.random()*150;
@@ -1774,6 +1795,8 @@ function update(dt){
   if(reviveHintT>0){ reviveHintT-=dt; if(reviveHintT<=0) buildButtons(); }
   // 新纪录小提示倒计时
   if(newRecordT>0) newRecordT-=dt;
+  // 冲击波衰减
+  for(let i=shockwaves.length-1;i>=0;i--){ const w=shockwaves[i]; w.life-=dt; if(w.life<=0) shockwaves.splice(i,1); }
 }
 function render(){
   ctx.clearRect(0,0,CFG.W,CFG.H);
@@ -1795,6 +1818,8 @@ function render(){
   // 光晕（使用预创建渐变）
   ctx.fillStyle=glowGrad1; ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,CFG.H);
   ctx.fillStyle=glowGrad2; ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,CFG.H);
+  ctx.fillStyle=nebula1; ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,CFG.H);
+  ctx.fillStyle=nebula2; ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,CFG.H);
   // 地面条
   ctx.fillStyle='#283250';
   ctx.fillRect(-CFG.W/2,-CFG.H/2,CFG.W,60);
@@ -1829,6 +1854,16 @@ function render(){
     ctx.fillStyle=i%2===0?`rgba(255,255,255,${k*0.85})`:`rgba(255,214,100,${k*0.9})`;
     ctx.beginPath(); ctx.arc(t.x,t.y,2.5+4.5*k,0,Math.PI*2); ctx.fill();
   }
+  // 冲击波圆环（上限6个）
+  if(shockwaves.length>6) shockwaves.splice(0,shockwaves.length-6);
+  for(const w of shockwaves){
+    const k=1-w.life/w.max;
+    ctx.globalAlpha=(1-k)*0.85;
+    ctx.strokeStyle=w.color;
+    ctx.lineWidth=4*(1-k)+1;
+    ctx.beginPath(); ctx.arc(w.x,w.y,20+w.maxR*k,0,Math.PI*2); ctx.stroke();
+  }
+  ctx.globalAlpha=1;
   // 空中食物：十二生肖 / 人生福报 / 抖音礼物
   for(const f of foods){
     const p = 0.5+0.5*Math.sin(f.pulse);
@@ -2108,13 +2143,13 @@ function render(){
     for(let i=0;i<end;i+=3){
       const k=i/(end-1);
       ctx.fillStyle=(i%6===0)?'rgba(255,214,100,0.95)':'rgba(255,255,255,0.9)';
-      ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y,3+4*k,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y-scrollOffset,3+4*k,0,Math.PI*2); ctx.fill();
     }
     const last=pts[end-1];
     ctx.fillStyle='#FFD700';
-    ctx.beginPath(); ctx.arc(last.x,last.y,8,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(last.x,last.y-scrollOffset,8,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.arc(last.x,last.y,8,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(last.x,last.y-scrollOffset,8,0,Math.PI*2); ctx.stroke();
   }
 
   // 浮动文字
@@ -2171,10 +2206,18 @@ function drawUI(){
     // 顶部装饰细线
     ctx.strokeStyle='rgba(0,245,255,0.25)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(-120,478); ctx.lineTo(120,478); ctx.stroke();
-    // 大标题（金色 + 青色霓虹发光，只画一次阴影）
+    // 大标题（青色多层辉光 + 金色主体 + 动态流光）
+    const tg=performance.now()*0.001;
+    const hue=Math.floor((Math.sin(tg)*0.5+0.5)*40);
     ctx.save();
-    ctx.shadowColor='rgba(0,245,255,0.9)'; ctx.shadowBlur=28;
-    drawText('蓄力弹射建造',0,430,64,'#FFD764');
+    ctx.font='bold 64px -apple-system,"PingFang SC",sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.lineWidth=12; ctx.strokeStyle=`hsla(${185+hue},100%,60%,0.28)`;
+    ctx.strokeText('蓄力弹射建造',0,430);
+    ctx.lineWidth=6; ctx.strokeStyle=`hsla(${185+hue},100%,70%,0.55)`;
+    ctx.strokeText('蓄力弹射建造',0,430);
+    ctx.fillStyle='#FFD764';
+    ctx.fillText('蓄力弹射建造',0,430);
     ctx.restore();
     // 副标题
     drawText('积 木 堆 塔 · 弹 射 连 击',0,380,20,'rgba(200,220,255,0.85)');
@@ -2493,7 +2536,7 @@ for(let i=0;i<12;i++){
   });
 }
 // 预创建渐变（性能优化：避免每帧创建）
-let bgGrad=null, glowGrad1=null, glowGrad2=null;
+let bgGrad=null, glowGrad1=null, glowGrad2=null, nebula1=null, nebula2=null;
 function initGradients(){
   bgGrad=ctx.createLinearGradient(0,-CFG.H/2,0,CFG.H/2);
   bgGrad.addColorStop(0,'#0d0f1e'); bgGrad.addColorStop(0.5,'#161832'); bgGrad.addColorStop(1,'#1a1030');
@@ -2501,6 +2544,10 @@ function initGradients(){
   glowGrad1.addColorStop(0,'rgba(140,90,220,0.22)'); glowGrad1.addColorStop(1,'rgba(140,90,220,0)');
   glowGrad2=ctx.createRadialGradient(-200,-300,0,-200,-300,250);
   glowGrad2.addColorStop(0,'rgba(255,110,64,0.10)'); glowGrad2.addColorStop(1,'rgba(255,110,64,0)');
+  nebula1=ctx.createRadialGradient(-260,-420,0,-260,-420,380);
+  nebula1.addColorStop(0,'rgba(0,245,255,0.10)'); nebula1.addColorStop(1,'rgba(0,245,255,0)');
+  nebula2=ctx.createRadialGradient(280,430,0,280,430,420);
+  nebula2.addColorStop(0,'rgba(150,80,255,0.12)'); nebula2.addColorStop(1,'rgba(150,80,255,0)');
 }
 initGradients();
 requestAnimationFrame(loop);
