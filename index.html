@@ -178,7 +178,9 @@ function getComboMult(combo){
   for(const [c,mult] of CFG.comboTiers){ if(combo>=c) m=mult; }
   return m;
 }
+// 性能优化：圆角很小（<=3px）时直接用 fillRect，省去 4 次 arcTo 三角函数
 function roundRect(ctx,x,y,w,h,r){
+  if(r<=3){ ctx.fillRect(x,y,w,h); return; }
   r=Math.min(r,w/2,h/2);
   ctx.beginPath();
   ctx.moveTo(x+r,y);
@@ -2384,9 +2386,13 @@ function drawUI(){
   }
   ctx.restore();
 }
+// 字体缓存：避免每帧重复创建 font 字符串
+const _fontCache={};
 function drawText(text,x,y,size,color,align='center'){
   ctx.fillStyle=color;
-  ctx.font=`bold ${size}px -apple-system,"PingFang SC",sans-serif`;
+  const key=size;
+  if(!_fontCache[key]) _fontCache[key]=`bold ${size}px -apple-system,"PingFang SC",sans-serif`;
+  ctx.font=_fontCache[key];
   ctx.textAlign=align; ctx.textBaseline='middle';
   ctx.fillText(text,x,y);
 }
