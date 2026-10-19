@@ -1084,7 +1084,7 @@ function onSuccess(x,y){
   combo++;
   updateLiveTask('combo',1);
   if(combo>maxCombo) maxCombo=combo;
-  if(settled.length>maxSnakeLen) maxSnakeLen=settled.length;
+  if(settledBlocks.length>maxSnakeLen) maxSnakeLen=settledBlocks.length;
   snakeDir = aimAngle;
   const top=platforms[platforms.length-1];
   const distFromCenter = top ? Math.abs(x - top.x) : 999;
