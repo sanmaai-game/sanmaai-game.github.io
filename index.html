@@ -1452,7 +1452,7 @@ function loop(now){
 }
 function update(dt){
   // 命中停顿：冻结物理但衰减特效计时
-  if(hitstop>0){ hitstop-=dt; dt=0; }
+  if(hitstop>0){ hitstop-=dt; if(hitstop>0) dt=0; }
   // 屏幕闪光衰减
   if(screenFlash>0) screenFlash=Math.max(0,screenFlash-dt*2.5);
   // 升级提示倒计时
